@@ -67,40 +67,6 @@ func checkOutputInventory(output string) FormatterInventory {
 	return nil
 }
 
-func banner() {
-	banner := `                        
-	
-  ___                       ___   _                   _ 
- | _ )  ___   __ _   _ _   / __| | |  ___   _  _   __| |
- | _ \ / _ \ / _` + "`" + ` | | '_| | (__  | | / _ \ | || | / _` + "`" + ` |
- |___/ \___/ \__,_| |_|    \___| |_| \___/  \_,_| \__,_|
-                                                         
-                                           
-                                 ░▓░░▒░░░░                                                   
-                              ░▓░▒▓░░▓░░█▓▓▓▓░                                               
-                            ▒▓░       ░   ▒░░░░▓░                                            
-                          ▒▒░ ░▒░ ░▒▓░▒   ░   ░  ░█▓▓▓▓▒                                     
-                        ▒▒░     ▒▒░▓▒ ▒    ░          ░░░░▒▒▒░                               
-                      ░▒░      ▒░▓██▒░░  ░░░   ░░░    ░▒     ░░▓░                            
-                    ░▒░        ▒░███░▓░                    ░▒░  ░▒░                          
-                   ░▒            ░░░░░           ░░░   ░░░        ░▒░                        
-                  ░▒   ░░░▒   ░░      ▒░   ░░                   ░▒ ░▓░▒▒▒                    
-                 ▒░    ░██▒                                ░░        ▒   ░▒▒░░               
-                ▒░     ░██░       ░▒░    ░▒░   ░▒░              ░▒░  ░▒   ▒███▒░             
-               ▒░  ░▓░        ▒░                                     ░▓    ▓██▒░             
-              ░▒   ░▒▒░        ░  ░░   ░▒░    ░░   ▒▒     ░░  ░▒░ ░▒░▒░     ░                
-             ░███▒  ▒▒░▓▒▒▒▒▒▒▒░░  ░▒                                ▒                       
-             ░█▓▓▓▓░░▓░         ░▒▒░░       ░░▒▓▒░░░░▒▓▒▒░    ░░    ▒░                       
-               ░▒▒▒░               ░▒░▒▓░   ▒░           ▓░▓░░      ▓░                       
-                                  ░▓   ▒▒░  ▒░          ▒░  ░▓▓░    ░▒                       
-                                  ▒░  ░▒ ▒  ░░          ▒   ▓░ ░▒░   ▒                       
-                                 ░▒  ░▒  ▒  ░▒         ▒▒  ▒░    ▒░  ░▒                      
-                                 ▒███▓░  ░▓▓██░       ░████▒      ░███▓                      
-                                  ░▒▒░    ▒█▓▒░         ░░░                                  
-                                                                                                                                        														   
-	`
-	fmt.Println(color.HiBlueString(banner))
-}
 
 func main() {
 	var service string
@@ -149,6 +115,11 @@ func main() {
 		{
 			log.Println(color.CyanString("Service assessment: Lambda functions"))
 			serviceLambda(awsConfig.cfg, awsConfig.ctx, formatter)
+		}
+	case "sns":
+		{
+			log.Println(color.CyanString("Service assessment: SNS"))
+			serviceSNS(awsConfig.cfg, awsConfig.ctx, output)
 		}
 	default:
 		fmt.Print("Unsupported service. Use 's3' or 'lambda'.")

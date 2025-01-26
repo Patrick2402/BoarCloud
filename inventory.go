@@ -75,7 +75,7 @@ func performInventory(cfg aws.Config, ctx context.Context, formatter FormatterIn
 
 	// Iterate over all services and count resources
 	for serviceName, function := range services {
-		log.Printf("Scanning service: %s", serviceName)
+		log.Printf(color.CyanString("Inventory scanning service: %s", serviceName))
 		count := function(cfg, ctx)
 		results = append(results, InventoryResult{
 			Service: serviceName,
