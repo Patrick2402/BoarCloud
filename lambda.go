@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	// "encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
-	"log"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/lambda/types"
@@ -15,46 +16,34 @@ import (
 )
 
 type LambdaFunctionInfo struct {
-	Name          string            `json:"name"`
-	Runtime       types.Runtime     `json:"runtime"`
+	Name          string               `json:"name"`
+	Runtime       types.Runtime        `json:"runtime"`
 	Architectures []types.Architecture `json:"architectures"`
-	FunctionArn   *string           `json:"function_arn"`
-	Role          *string           `json:"role"`
-	Environment   map[string]string `json:"environment,omitempty"`
-	Message       string            `json:"message,omitempty"`
-	VpcAttached   *string           `json:"vpcId,omitempty"`
+	FunctionArn   *string              `json:"function_arn"`
+	Role          *string              `json:"role"`
+	Environment   map[string]string    `json:"environment,omitempty"`
+	Message       string               `json:"message,omitempty"`
+	VpcAttached   *string              `json:"vpcId,omitempty"`
 }
 
 type Formatter interface {
-	Format(functions []LambdaFunctionInfo) error
+	Format(functions []LambdaFunctionInfo) 
 }
 
 type JSONFormatter struct{}
 
-func (j *JSONFormatter) Format(functions []LambdaFunctionInfo) error {
-	jsonData, err := json.MarshalIndent(functions, "", "  ")
-	if err != nil {
-		return fmt.Errorf("couldn't marshal functions to JSON: %v", err)
-	}
+func (j *JSONFormatter) Format(functions []LambdaFunctionInfo) {
 
-	file, err := os.Create("lambda_functions.json")
-	if err != nil {
-		return fmt.Errorf("couldn't create file: %v", err)
-	}
-	defer file.Close()
+	err := serviceAssessmentToJSONFile("lambda", functions)
 
-	_, err = file.Write(jsonData)
 	if err != nil {
-		return fmt.Errorf("couldn't write to file: %v", err)
+		log.Println(color.RedString("Cannot save assessment to the JSON file. "), err)
 	}
-
-	log.Println(color.GreenString("Lambda functions saved to lambda.json"))
-	return nil
 }
 
 type TableFormatter struct{}
 
-func (t *TableFormatter) Format(functions []LambdaFunctionInfo) error {
+func (t *TableFormatter) Format(functions []LambdaFunctionInfo) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Name", "Runtime", "Architectures", "Function ARN", "Role", "Environment Variables", "Message", "VPC"})
 
@@ -88,7 +77,7 @@ func (t *TableFormatter) Format(functions []LambdaFunctionInfo) error {
 		var runtime_color string
 		if function.Message != "" {
 			runtime_color = color.RedString(string(function.Runtime))
-		}  else {
+		} else {
 			runtime_color = color.GreenString(string(function.Runtime))
 		}
 
@@ -106,11 +95,9 @@ func (t *TableFormatter) Format(functions []LambdaFunctionInfo) error {
 
 	table.SetBorder(true)
 	table.Render()
-
-	return nil
 }
 
-func serviceLambda(cfg aws.Config, ctx context.Context, formatter Formatter) {
+func serviceLambda(cfg aws.Config, ctx context.Context, output string) {
 	// creating lambda client with aws config
 
 	lambdaClient := lambda.NewFromConfig(cfg)
@@ -118,9 +105,8 @@ func serviceLambda(cfg aws.Config, ctx context.Context, formatter Formatter) {
 	if err != nil {
 		fmt.Printf("Couldn't list functions for your account. Reason: %v\n", err)
 		return
-	}	
+	}
 
-	
 	var lambdaFunctions []LambdaFunctionInfo
 
 	if len(result.Functions) == 0 {
@@ -128,7 +114,6 @@ func serviceLambda(cfg aws.Config, ctx context.Context, formatter Formatter) {
 	} else {
 		log.Println(color.CyanString("Processing %d lambdas...", len(result.Functions)))
 		for _, function := range result.Functions {
-			
 
 			message := ""
 
@@ -170,17 +155,20 @@ func serviceLambda(cfg aws.Config, ctx context.Context, formatter Formatter) {
 			lambdaFunctions = append(lambdaFunctions, lambdaFunctionInfo)
 		}
 
-
-		if err := formatter.Format(lambdaFunctions); err != nil {
-			fmt.Printf("Error formatting output: %v\n", err)
+		if output == "table" {
+			forrmater := &TableFormatter{}
+			forrmater.Format(lambdaFunctions)
 		}
+
+		if output == "json" {
+			forrmater := &JSONFormatter{}
+			forrmater.Format(lambdaFunctions)
+		}
+
 	}
-	log.Println(color.GreenString("Processing finised!"))
 }
 
-
-
-//  Helper supported runtimes! Should be in another file
+// Helper supported runtimes! Should be in another file
 var supportedRuntimes = []struct {
 	Name            string
 	Identifier      string

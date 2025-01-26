@@ -114,7 +114,7 @@ func main() {
 	case "lambda":
 		{
 			log.Println(color.CyanString("Service assessment: Lambda functions"))
-			serviceLambda(awsConfig.cfg, awsConfig.ctx, formatter)
+			serviceLambda(awsConfig.cfg, awsConfig.ctx, output)
 		}
 	case "sns":
 		{
