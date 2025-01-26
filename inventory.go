@@ -64,7 +64,7 @@ func listLambdaFunctions(cfg aws.Config, ctx context.Context) int {
 }
 
 // performInventory performs an inventory scan and returns results
-func performInventory(cfg aws.Config, ctx context.Context, formatter FormatterInventory, output string) {
+func performInventory(cfg aws.Config, ctx context.Context, formatter FormatterInventory) {
 	// Map of supported services and their corresponding functions
 	services := map[string]ServiceFunction{
 		"s3":     listS3Buckets,
