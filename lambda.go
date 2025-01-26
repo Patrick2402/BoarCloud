@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	// "encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
-	"log"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/lambda/types"
@@ -15,46 +16,34 @@ import (
 )
 
 type LambdaFunctionInfo struct {
-	Name          string            `json:"name"`
-	Runtime       types.Runtime     `json:"runtime"`
+	Name          string               `json:"name"`
+	Runtime       types.Runtime        `json:"runtime"`
 	Architectures []types.Architecture `json:"architectures"`
-	FunctionArn   *string           `json:"function_arn"`
-	Role          *string           `json:"role"`
-	Environment   map[string]string `json:"environment,omitempty"`
-	Message       string            `json:"message,omitempty"`
-	VpcAttached   *string           `json:"vpcId,omitempty"`
+	FunctionArn   *string              `json:"function_arn"`
+	Role          *string              `json:"role"`
+	Environment   map[string]string    `json:"environment,omitempty"`
+	Message       string               `json:"message,omitempty"`
+	VpcAttached   *string              `json:"vpcId,omitempty"`
 }
 
 type Formatter interface {
-	Format(functions []LambdaFunctionInfo) error
+	Format(functions []LambdaFunctionInfo)
 }
 
 type JSONFormatter struct{}
 
-func (j *JSONFormatter) Format(functions []LambdaFunctionInfo) error {
-	jsonData, err := json.MarshalIndent(functions, "", "  ")
-	if err != nil {
-		return fmt.Errorf("couldn't marshal functions to JSON: %v", err)
-	}
+func (j *JSONFormatter) Format(functions []LambdaFunctionInfo) {
 
-	file, err := os.Create("lambda_functions.json")
-	if err != nil {
-		return fmt.Errorf("couldn't create file: %v", err)
-	}
-	defer file.Close()
+	err := serviceAssessmentToJSONFile("lambda", functions)
 
-	_, err = file.Write(jsonData)
 	if err != nil {
-		return fmt.Errorf("couldn't write to file: %v", err)
+		log.Println(color.RedString("Cannot save assessment to the JSON file. "), err)
 	}
-
-	log.Println(color.GreenString("Lambda functions saved to lambda.json"))
-	return nil
 }
 
 type TableFormatter struct{}
 
-func (t *TableFormatter) Format(functions []LambdaFunctionInfo) error {
+func (t *TableFormatter) Format(functions []LambdaFunctionInfo) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Name", "Runtime", "Architectures", "Function ARN", "Role", "Environment Variables", "Message", "VPC"})
 
@@ -88,7 +77,7 @@ func (t *TableFormatter) Format(functions []LambdaFunctionInfo) error {
 		var runtime_color string
 		if function.Message != "" {
 			runtime_color = color.RedString(string(function.Runtime))
-		}  else {
+		} else {
 			runtime_color = color.GreenString(string(function.Runtime))
 		}
 
@@ -106,81 +95,90 @@ func (t *TableFormatter) Format(functions []LambdaFunctionInfo) error {
 
 	table.SetBorder(true)
 	table.Render()
-
-	return nil
 }
 
-func serviceLambda(cfg aws.Config, ctx context.Context, formatter Formatter) {
-	// creating lambda client with aws config
+func serviceLambda(cfg aws.Config, ctx context.Context, outputFormat string) {
+    lambdaClient := lambda.NewFromConfig(cfg)
+    result, err := lambdaClient.ListFunctions(ctx, &lambda.ListFunctionsInput{})
+    if err != nil {
+        fmt.Printf("Couldn't list functions for your account. Reason: %v\n", err)
+        return
+    }
 
-	lambdaClient := lambda.NewFromConfig(cfg)
-	result, err := lambdaClient.ListFunctions(ctx, &lambda.ListFunctionsInput{})
-	if err != nil {
-		fmt.Printf("Couldn't list functions for your account. Reason: %v\n", err)
-		return
-	}	
+    if len(result.Functions) == 0 {
+        log.Println(color.RedString("You don't have any functions!"))
+        return
+    }
 
-	
-	var lambdaFunctions []LambdaFunctionInfo
+    log.Println(color.CyanString("Processing %d lambdas...", len(result.Functions)))
+    lambdaFunctions := processLambdaFunctions(ctx, lambdaClient, result.Functions)
 
-	if len(result.Functions) == 0 {
-		log.Println(color.RedString("You don't have any functions!"))
-	} else {
-		log.Println(color.CyanString("Processing %d lambdas...", len(result.Functions)))
-		for _, function := range result.Functions {
-			
-
-			message := ""
-
-			if !isRuntimeSupported(string(function.Runtime)) {
-				message = color.RedString("Unsupported lambda runtime")
-			}
-
-			config, err := lambdaClient.GetFunctionConfiguration(ctx, &lambda.GetFunctionConfigurationInput{
-				FunctionName: function.FunctionName,
-			})
-
-			if err != nil {
-				fmt.Printf("Couldn't fetch configuration for function %s. Reason: %v\n", *function.FunctionName, err)
-				continue
-			}
-
-			envVars := make(map[string]string)
-			if config.Environment != nil && config.Environment.Variables != nil {
-				for key, value := range config.Environment.Variables {
-					envVars[key] = value
-				}
-			}
-
-			vpc := ""
-			if function.VpcConfig != nil && function.VpcConfig.VpcId != nil {
-				vpc = *function.VpcConfig.VpcId
-			}
-
-			lambdaFunctionInfo := LambdaFunctionInfo{
-				Name:          *function.FunctionName,
-				Runtime:       function.Runtime,
-				Architectures: function.Architectures,
-				FunctionArn:   function.FunctionArn,
-				Role:          function.Role,
-				Environment:   envVars,
-				Message:       message,
-				VpcAttached:   &vpc,
-			}
-			lambdaFunctions = append(lambdaFunctions, lambdaFunctionInfo)
-		}
-
-
-		if err := formatter.Format(lambdaFunctions); err != nil {
-			fmt.Printf("Error formatting output: %v\n", err)
-		}
-	}
-	log.Println(color.GreenString("Processing finised!"))
+    switch outputFormat {
+    case "table":
+        formatter := &TableFormatter{}
+        formatter.Format(lambdaFunctions)
+    case "json":
+        formatter := &JSONFormatter{}
+        formatter.Format(lambdaFunctions)
+    default:
+        log.Println(color.RedString("Invalid output format specified"))
+    }
 }
 
+func processLambdaFunctions(ctx context.Context, lambdaClient *lambda.Client, functions []types.FunctionConfiguration) []LambdaFunctionInfo {
+    var lambdaFunctions []LambdaFunctionInfo
 
+    for _, function := range functions {
+        message := ""
+        if !isRuntimeSupported(string(function.Runtime)) {
+            message = color.RedString("Unsupported lambda runtime")
+        }
 
-//  Helper supported runtimes! Should be in another file
+        config, err := lambdaClient.GetFunctionConfiguration(ctx, &lambda.GetFunctionConfigurationInput{
+            FunctionName: function.FunctionName,
+        })
+        if err != nil {
+            fmt.Printf("Couldn't fetch configuration for function %s. Reason: %v\n", *function.FunctionName, err)
+            continue
+        }
+
+        envVars := getEnvironmentVariables(config)
+        vpc := getVpcId(function)
+
+        lambdaFunctionInfo := LambdaFunctionInfo{
+            Name:          *function.FunctionName,
+            Runtime:       function.Runtime,
+            Architectures: function.Architectures,
+            FunctionArn:   function.FunctionArn,
+            Role:          function.Role,
+            Environment:   envVars,
+            Message:       message,
+            VpcAttached:   &vpc,
+        }
+        lambdaFunctions = append(lambdaFunctions, lambdaFunctionInfo)
+    }
+
+    return lambdaFunctions
+}
+
+func getEnvironmentVariables(config *lambda.GetFunctionConfigurationOutput) map[string]string {
+    envVars := make(map[string]string)
+    if config.Environment != nil && config.Environment.Variables != nil {
+        for key, value := range config.Environment.Variables {
+            envVars[key] = value
+        }
+    }
+    return envVars
+}
+
+func getVpcId(function types.FunctionConfiguration) string {
+    if function.VpcConfig != nil && function.VpcConfig.VpcId != nil {
+        return *function.VpcConfig.VpcId
+    }
+    return ""
+}
+
+// Helper supported runtimes! Should be in another file
 var supportedRuntimes = []struct {
 	Name            string
 	Identifier      string
