@@ -130,7 +130,7 @@ func main() {
 		}
 
 		// Perform inventory scan
-		performInventory(awsConfig.cfg, awsConfig.ctx, inventoryFormatter, output)
+		performInventory(awsConfig.cfg, awsConfig.ctx, inventoryFormatter)
 		return 
 	}
 
