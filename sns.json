@@ -1,0 +1,32 @@
+[
+  {
+    "topicName": "emailtopic",
+    "topicArn": "arn:aws:sns:eu-central-1:541889288027:emailtopic",
+    "SubscriptionsConfirmed": 1
+  },
+  {
+    "topicName": "rackspace-awsconfig",
+    "topicArn": "arn:aws:sns:eu-central-1:541889288027:rackspace-awsconfig",
+    "SubscriptionsConfirmed": 0
+  },
+  {
+    "topicName": "rackspace-support",
+    "topicArn": "arn:aws:sns:eu-central-1:541889288027:rackspace-support",
+    "SubscriptionsConfirmed": 1
+  },
+  {
+    "topicName": "rackspace-support-emergency",
+    "topicArn": "arn:aws:sns:eu-central-1:541889288027:rackspace-support-emergency",
+    "SubscriptionsConfirmed": 1
+  },
+  {
+    "topicName": "rackspace-support-standard",
+    "topicArn": "arn:aws:sns:eu-central-1:541889288027:rackspace-support-standard",
+    "SubscriptionsConfirmed": 1
+  },
+  {
+    "topicName": "rackspace-support-urgent",
+    "topicArn": "arn:aws:sns:eu-central-1:541889288027:rackspace-support-urgent",
+    "SubscriptionsConfirmed": 1
+  }
+]
