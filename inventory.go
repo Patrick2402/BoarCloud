@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sns/types"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 )
@@ -84,20 +85,40 @@ func listSnsTopics(cfg aws.Config, ctx context.Context) int {
 
 }
 
+func listSqsQueues(cfg aws.Config, ctx context.Context) int {
+	sqsClient := sqs.NewFromConfig(cfg)
+
+	// Paginate through the results
+	paginator := sqs.NewListQueuesPaginator(sqsClient, &sqs.ListQueuesInput{})
+	var queues []string
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			log.Printf("Couldn't get queues. Here's why: %v\n", err)
+			break
+		} else {
+			queues = append(queues, page.QueueUrls...)
+		}
+	}
+	return len(queues)
+
+}
+
 // performInventory performs an inventory scan and returns results
 func performInventory(cfg aws.Config, ctx context.Context, formatter FormatterInventory) {
 	// Map of supported services and their corresponding functions
 	services := map[string]ServiceFunction{
 		"s3":     listS3Buckets,
 		"lambda": listLambdaFunctions,
-		"sns": listSnsTopics,
+		"sns":    listSnsTopics,
+		"sqs":    listSqsQueues,
 	}
 
 	var results []InventoryResult
 
 	// Iterate over all services and count resources
 	for serviceName, function := range services {
-		log.Printf(color.CyanString("Inventory scanning service: %s", serviceName))
+		log.Printf(color.CyanString("Inventory scanning service: "), serviceName)
 		count := function(cfg, ctx)
 		results = append(results, InventoryResult{
 			Service: serviceName,

@@ -121,6 +121,11 @@ func main() {
 			log.Println(color.CyanString("Service assessment: SNS"))
 			serviceSNS(awsConfig.cfg, awsConfig.ctx, output)
 		}
+	case "sqs":
+		{
+			log.Println(color.CyanString("Service assessment: SQS"))
+			serviceSQS(awsConfig.cfg, awsConfig.ctx, output)
+		}
 	default:
 		fmt.Print("Unsupported service. Use 's3' or 'lambda'.")
 	}

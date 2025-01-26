@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -12,8 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/fatih/color"
-
-	// "github.com/aws/aws-sdk-go-v2/service/sns/types"
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -32,21 +29,11 @@ type JSONFormatterSns struct {}
 
 
 func (f *JSONFormatterSns) Format(topics []SnsTopics) {
-	file, err := os.Create("sns.json")
+	err := serviceAssessmentToJSONFile("sns", topics)
+
 	if err != nil {
-		log.Printf("Failed to create sns.json: %v", err)
-		return
+		log.Println(color.RedString("Cannot save assessment to the JSON file. "), err)
 	}
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(topics); err != nil {
-		log.Printf("Failed to write to sns.json: %v", err)
-		return
-	}
-
-	log.Println(color.GreenString("Inventory saved to inventory.json"))
 }
 
 
@@ -72,12 +59,10 @@ func (f *TableFormatterSns) Format(topics []SnsTopics) {
 func serviceSNS(cfg aws.Config, ctx context.Context, output string) {
 	// Create SNS service client
 	snsClient := sns.NewFromConfig(cfg)
-
-	input := &sns.ListTopicsInput{}
 	var topics []SnsTopics
 
 	// Paginate through the results
-	paginator := sns.NewListTopicsPaginator(snsClient, input)
+	paginator := sns.NewListTopicsPaginator(snsClient,  &sns.ListTopicsInput{})
 
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
