@@ -27,7 +27,7 @@ type LambdaFunctionInfo struct {
 }
 
 type Formatter interface {
-	Format(functions []LambdaFunctionInfo) 
+	Format(functions []LambdaFunctionInfo)
 }
 
 type JSONFormatter struct{}
