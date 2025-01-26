@@ -97,75 +97,85 @@ func (t *TableFormatter) Format(functions []LambdaFunctionInfo) {
 	table.Render()
 }
 
-func serviceLambda(cfg aws.Config, ctx context.Context, output string) {
-	// creating lambda client with aws config
+func serviceLambda(cfg aws.Config, ctx context.Context, outputFormat string) {
+    lambdaClient := lambda.NewFromConfig(cfg)
+    result, err := lambdaClient.ListFunctions(ctx, &lambda.ListFunctionsInput{})
+    if err != nil {
+        fmt.Printf("Couldn't list functions for your account. Reason: %v\n", err)
+        return
+    }
 
-	lambdaClient := lambda.NewFromConfig(cfg)
-	result, err := lambdaClient.ListFunctions(ctx, &lambda.ListFunctionsInput{})
-	if err != nil {
-		fmt.Printf("Couldn't list functions for your account. Reason: %v\n", err)
-		return
-	}
+    if len(result.Functions) == 0 {
+        log.Println(color.RedString("You don't have any functions!"))
+        return
+    }
 
-	var lambdaFunctions []LambdaFunctionInfo
+    log.Println(color.CyanString("Processing %d lambdas...", len(result.Functions)))
+    lambdaFunctions := processLambdaFunctions(ctx, lambdaClient, result.Functions)
 
-	if len(result.Functions) == 0 {
-		log.Println(color.RedString("You don't have any functions!"))
-	} else {
-		log.Println(color.CyanString("Processing %d lambdas...", len(result.Functions)))
-		for _, function := range result.Functions {
+    switch outputFormat {
+    case "table":
+        formatter := &TableFormatter{}
+        formatter.Format(lambdaFunctions)
+    case "json":
+        formatter := &JSONFormatter{}
+        formatter.Format(lambdaFunctions)
+    default:
+        log.Println(color.RedString("Invalid output format specified"))
+    }
+}
 
-			message := ""
+func processLambdaFunctions(ctx context.Context, lambdaClient *lambda.Client, functions []types.FunctionConfiguration) []LambdaFunctionInfo {
+    var lambdaFunctions []LambdaFunctionInfo
 
-			if !isRuntimeSupported(string(function.Runtime)) {
-				message = color.RedString("Unsupported lambda runtime")
-			}
+    for _, function := range functions {
+        message := ""
+        if !isRuntimeSupported(string(function.Runtime)) {
+            message = color.RedString("Unsupported lambda runtime")
+        }
 
-			config, err := lambdaClient.GetFunctionConfiguration(ctx, &lambda.GetFunctionConfigurationInput{
-				FunctionName: function.FunctionName,
-			})
+        config, err := lambdaClient.GetFunctionConfiguration(ctx, &lambda.GetFunctionConfigurationInput{
+            FunctionName: function.FunctionName,
+        })
+        if err != nil {
+            fmt.Printf("Couldn't fetch configuration for function %s. Reason: %v\n", *function.FunctionName, err)
+            continue
+        }
 
-			if err != nil {
-				fmt.Printf("Couldn't fetch configuration for function %s. Reason: %v\n", *function.FunctionName, err)
-				continue
-			}
+        envVars := getEnvironmentVariables(config)
+        vpc := getVpcId(function)
 
-			envVars := make(map[string]string)
-			if config.Environment != nil && config.Environment.Variables != nil {
-				for key, value := range config.Environment.Variables {
-					envVars[key] = value
-				}
-			}
+        lambdaFunctionInfo := LambdaFunctionInfo{
+            Name:          *function.FunctionName,
+            Runtime:       function.Runtime,
+            Architectures: function.Architectures,
+            FunctionArn:   function.FunctionArn,
+            Role:          function.Role,
+            Environment:   envVars,
+            Message:       message,
+            VpcAttached:   &vpc,
+        }
+        lambdaFunctions = append(lambdaFunctions, lambdaFunctionInfo)
+    }
 
-			vpc := ""
-			if function.VpcConfig != nil && function.VpcConfig.VpcId != nil {
-				vpc = *function.VpcConfig.VpcId
-			}
+    return lambdaFunctions
+}
 
-			lambdaFunctionInfo := LambdaFunctionInfo{
-				Name:          *function.FunctionName,
-				Runtime:       function.Runtime,
-				Architectures: function.Architectures,
-				FunctionArn:   function.FunctionArn,
-				Role:          function.Role,
-				Environment:   envVars,
-				Message:       message,
-				VpcAttached:   &vpc,
-			}
-			lambdaFunctions = append(lambdaFunctions, lambdaFunctionInfo)
-		}
+func getEnvironmentVariables(config *lambda.GetFunctionConfigurationOutput) map[string]string {
+    envVars := make(map[string]string)
+    if config.Environment != nil && config.Environment.Variables != nil {
+        for key, value := range config.Environment.Variables {
+            envVars[key] = value
+        }
+    }
+    return envVars
+}
 
-		if output == "table" {
-			forrmater := &TableFormatter{}
-			forrmater.Format(lambdaFunctions)
-		}
-
-		if output == "json" {
-			forrmater := &JSONFormatter{}
-			forrmater.Format(lambdaFunctions)
-		}
-
-	}
+func getVpcId(function types.FunctionConfiguration) string {
+    if function.VpcConfig != nil && function.VpcConfig.VpcId != nil {
+        return *function.VpcConfig.VpcId
+    }
+    return ""
 }
 
 // Helper supported runtimes! Should be in another file
