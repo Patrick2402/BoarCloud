@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	// "encoding/json"
 	"log"
-	"os"
-	"strconv"
+	// "os"
+	// "strconv"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -15,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sns/types"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/fatih/color"
-	"github.com/olekukonko/tablewriter"
+// 	"github.com/olekukonko/tablewriter"
 )
 
 type ServiceFunction func(AwsCfg) int
@@ -107,7 +107,6 @@ func listSnsTopics(cfg AwsCfg) int {
 func listSqsQueues(cfg AwsCfg) int {
 	sqsClient := sqs.NewFromConfig(cfg.cfg)
 
-	// Paginate through the results
 	paginator := sqs.NewListQueuesPaginator(sqsClient, &sqs.ListQueuesInput{})
 	var queues []string
 	for paginator.HasMorePages() {
@@ -123,7 +122,7 @@ func listSqsQueues(cfg AwsCfg) int {
 
 }
 
-func performInventory(cfg AwsCfg, formatter func([]InventoryResult)) {
+func performInventory(cfg AwsCfg, output string) {
 	var results []InventoryResult
 	makeInventory := func(serviceName string, f ServiceFunction) {
 		log.Printf(color.CyanString("Inventory scanning service: %s"), serviceName)
@@ -138,58 +137,15 @@ func performInventory(cfg AwsCfg, formatter func([]InventoryResult)) {
 	makeInventory("sns", listSnsTopics)
 	makeInventory("sqs", listSqsQueues)
 
-	formatter(results)
+
+	switch output {
+	case "table":
+		FormatTable(results, []string{"Service", "Count"})
+	case "json":
+		FormatJSON(results, "inventory")
+	default:
+		FormatTable(results, []string{"Service", "Count"})
+	}
 }
 
-type FormatterInventory interface {
-	Format(results []InventoryResult)
-}
 
-type TableFormatterInventory struct{}
-
-func formatTable(results []InventoryResult) {
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Service", "Count"})
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
-
-	for _, results := range results {
-		table.Append([]string{
-			results.Service,
-			strconv.Itoa(results.Count),
-		})
-	}
-	table.SetBorder(true)
-	// table.SetRowLine(true)
-	table.Render()
-}
-
-func formatJson(results []InventoryResult) {
-	file, err := os.Create("inventory.json")
-	if err != nil {
-		log.Printf("Failed to create inventory.json: %v", err)
-		return
-	}
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(results); err != nil {
-		log.Printf("Failed to write to inventory.json: %v", err)
-		return
-	}
-
-	log.Println(color.GreenString("Inventory saved to inventory.json"))
-}
-
-func checkOutputInventory(output string) func([]InventoryResult) {
-	if output == "table" {
-		log.Println(color.CyanString("Output form: table"))
-		return formatTable
-	}
-	if output == "json" {
-		log.Println(color.CyanString("Output form: JSON"))
-		return formatJson
-	}
-	log.Println(color.CyanString("Default output: table"))
-	return formatTable
-}

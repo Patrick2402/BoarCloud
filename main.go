@@ -31,13 +31,7 @@ func main() {
 
 	if inventory == "true" {
 		log.Println(color.CyanString("Performing inventory scan..."))
-
-		inventoryFormatter := checkOutputInventory(output)
-		if inventoryFormatter == nil {
-			log.Fatalf("Invalid output format for inventory: %s", output)
-		}
-
-		performInventory(cfg, inventoryFormatter)
+		performInventory(cfg, output)
 		return
 	}
 

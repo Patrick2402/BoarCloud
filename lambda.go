@@ -45,7 +45,6 @@ func serviceLambda(cfg AwsCfg, outputFormat string) {
 		FormatJSON(lambdaFunctions, "lambda")
 	default:
 		FormatTable(lambdaFunctions, []string{"Name", "Runtime", "Architectures", "Function ARN", "Role", "Environment Variables", "Message", "VPC"})
-
 	}
 }
 
