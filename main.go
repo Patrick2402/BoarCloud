@@ -1,42 +1,12 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"log"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/fatih/color"
 )
-
-// AwsInit holds AWS context and configuration
-type AwsInit struct {
-	ctx context.Context
-	cfg aws.Config
-}
-
-// awsInit initializes the AWS configuration and context
-func awsInit(region string) AwsInit {
-
-	ctx := context.Background()
-	var awsConfig AwsInit
-	log.Println(color.BlueString("Loading default AWS account configuration..."))
-
-	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion(region),
-	)
-	if err != nil {
-		log.Fatalf("Cannot load AWS configuration: %v", err)
-	}
-	log.Println(color.GreenString("Configuration loaded successfuly!"))
-
-	awsConfig.cfg = cfg
-	awsConfig.ctx = ctx
-
-	return awsConfig
-}
 
 func checkOutput(output string) Formatter {
 	if output == "table" {
@@ -51,22 +21,6 @@ func checkOutput(output string) Formatter {
 	}
 	return nil
 }
-
-// need to change bc i do not have idea
-func checkOutputInventory(output string) FormatterInventory {
-	if output == "table" {
-		log.Println(color.CyanString("Output form: table"))
-		formatter := &TableFormatterInventory{}
-		return formatter
-	}
-	if output == "json" {
-		log.Println(color.CyanString("Output form: JSON"))
-		formatter := &JSONFormatterInventory{}
-		return formatter
-	}
-	return nil
-}
-
 
 func main() {
 	var service string
@@ -84,7 +38,10 @@ func main() {
 	flag.Parse()
 	log.Println(color.GreenString("Arguments fine!"))
 
-	awsConfig := awsInit(region)
+	cfg, err := awsCfg(region)
+	if err != nil {
+		log.Fatalf("Cannot load AWS configuration: %v", err)
+	}
 
 	if inventory == "true" {
 		log.Println(color.CyanString("Performing inventory scan..."))
@@ -96,8 +53,8 @@ func main() {
 		}
 
 		// Perform inventory scan
-		performInventory(awsConfig.cfg, awsConfig.ctx, inventoryFormatter)
-		return 
+		performInventory(cfg, inventoryFormatter)
+		return
 	}
 
 	formatter := checkOutput(output)
@@ -109,22 +66,22 @@ func main() {
 	case "s3":
 		{
 			log.Println(color.CyanString("Service assessment: S3 buckets"))
-			serviceS3(awsConfig.cfg, awsConfig.ctx)
+			serviceS3(cfg)
 		}
 	case "lambda":
 		{
 			log.Println(color.CyanString("Service assessment: Lambda functions"))
-			serviceLambda(awsConfig.cfg, awsConfig.ctx, output)
+			serviceLambda(cfg, output)
 		}
 	case "sns":
 		{
 			log.Println(color.CyanString("Service assessment: SNS"))
-			serviceSNS(awsConfig.cfg, awsConfig.ctx, output)
+			serviceSNS(cfg, output)
 		}
 	case "sqs":
 		{
 			log.Println(color.CyanString("Service assessment: SQS"))
-			serviceSQS(awsConfig.cfg, awsConfig.ctx, output)
+			serviceSQS(cfg, output)
 		}
 	default:
 		fmt.Print("Unsupported service. Use 's3' or 'lambda'.")

@@ -1,30 +1,28 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
 	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 )
 
-func serviceSQS(cfg aws.Config, ctx context.Context, output string) {
+func serviceSQS(cfg AwsCfg, output string) {
 	log.Println(color.RedString("SQS assessment!"))
 
-	sqsClient := sqs.NewFromConfig(cfg)
+	sqsClient := sqs.NewFromConfig(cfg.cfg)
 	var queues []SqsQueues
 
 	// Paginate through the results
 	paginator := sqs.NewListQueuesPaginator(sqsClient, &sqs.ListQueuesInput{})
 
 	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(ctx)
+		page, err := paginator.NextPage(cfg.ctx)
 		if err != nil {
 			log.Printf("Couldn't get queues. Here's why: %v\n", err)
 			break
@@ -37,7 +35,7 @@ func serviceSQS(cfg aws.Config, ctx context.Context, output string) {
 					types.QueueAttributeNameKmsMasterKeyId,
 				},
 			}
-			attributesOutput, err := sqsClient.GetQueueAttributes(ctx, &getQueueAttributesInput)
+			attributesOutput, err := sqsClient.GetQueueAttributes(cfg.ctx, &getQueueAttributesInput)
 
 			isEncrypted := false
 			queueArn := ""
@@ -86,7 +84,7 @@ func (f *TableFormatterSqs) Format(queues []SqsQueues) {
 		table.Append([]string{
 			queue.QueueName,
 			queue.QueueArn,
-			fmt.Sprintf("%t",queue.Encrypted),
+			fmt.Sprintf("%t", queue.Encrypted),
 		})
 	}
 	table.SetBorder(true)
@@ -100,6 +98,3 @@ func (f *JSONFormatterSqs) Format(queues []SqsQueues) {
 		log.Println(color.RedString("Cannot save assessment to the JSON file. "), err)
 	}
 }
-
-
-
