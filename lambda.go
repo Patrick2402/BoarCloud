@@ -2,16 +2,13 @@ package main
 
 import (
 	"context"
-	// "encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	"github.com/fatih/color"
-	"github.com/olekukonko/tablewriter"
 )
 
 type LambdaFunctionInfo struct {
@@ -23,77 +20,6 @@ type LambdaFunctionInfo struct {
 	Environment   map[string]string    `json:"environment,omitempty"`
 	Message       string               `json:"message,omitempty"`
 	VpcAttached   *string              `json:"vpcId,omitempty"`
-}
-
-type Formatter interface {
-	Format(functions []LambdaFunctionInfo)
-}
-
-type JSONFormatter struct{}
-
-func (j *JSONFormatter) Format(functions []LambdaFunctionInfo) {
-
-	err := serviceAssessmentToJSONFile("lambda", functions)
-
-	if err != nil {
-		log.Println(color.RedString("Cannot save assessment to the JSON file. "), err)
-	}
-}
-
-type TableFormatter struct{}
-
-func (t *TableFormatter) Format(functions []LambdaFunctionInfo) {
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Name", "Runtime", "Architectures", "Function ARN", "Role", "Environment Variables", "Message", "VPC"})
-
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
-
-	for _, function := range functions {
-		architectures := ""
-		for _, arch := range function.Architectures {
-			architectures += string(arch) + " "
-		}
-
-		functionArn := ""
-		if function.FunctionArn != nil {
-			functionArn = *function.FunctionArn
-		}
-
-		role := ""
-		if function.Role != nil {
-			role = *function.Role
-		}
-		vpc := ""
-		if function.VpcAttached != nil {
-			vpc = *function.VpcAttached
-		}
-
-		envVars := ""
-		for key, value := range function.Environment {
-			envVars += fmt.Sprintf("%s=%s ", key, value)
-		}
-
-		var runtime_color string
-		if function.Message != "" {
-			runtime_color = color.RedString(string(function.Runtime))
-		} else {
-			runtime_color = color.GreenString(string(function.Runtime))
-		}
-
-		table.Append([]string{
-			function.Name,
-			runtime_color,
-			architectures,
-			functionArn,
-			role,
-			envVars,
-			function.Message,
-			vpc,
-		})
-	}
-
-	table.SetBorder(true)
-	table.Render()
 }
 
 func serviceLambda(cfg AwsCfg, outputFormat string) {
@@ -114,13 +40,12 @@ func serviceLambda(cfg AwsCfg, outputFormat string) {
 
 	switch outputFormat {
 	case "table":
-		formatter := &TableFormatter{}
-		formatter.Format(lambdaFunctions)
+		FormatTable(lambdaFunctions, []string{"Name", "Runtime", "Architectures", "Function ARN", "Role", "Environment Variables", "Message", "VPC"})
 	case "json":
-		formatter := &JSONFormatter{}
-		formatter.Format(lambdaFunctions)
+		FormatJSON(lambdaFunctions, "lambda")
 	default:
-		log.Println(color.RedString("Invalid output format specified"))
+		FormatTable(lambdaFunctions, []string{"Name", "Runtime", "Architectures", "Function ARN", "Role", "Environment Variables", "Message", "VPC"})
+
 	}
 }
 

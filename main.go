@@ -8,20 +8,6 @@ import (
 	"github.com/fatih/color"
 )
 
-func checkOutput(output string) Formatter {
-	if output == "table" {
-		log.Println(color.CyanString("Output form: table"))
-		formatter := &TableFormatter{}
-		return formatter
-	}
-	if output == "json" {
-		log.Println(color.CyanString("Output form: JSON"))
-		formatter := &JSONFormatter{}
-		return formatter
-	}
-	return nil
-}
-
 func main() {
 	var service string
 	var region string
@@ -46,20 +32,13 @@ func main() {
 	if inventory == "true" {
 		log.Println(color.CyanString("Performing inventory scan..."))
 
-		// Use appropriate formatter for inventory
 		inventoryFormatter := checkOutputInventory(output)
 		if inventoryFormatter == nil {
 			log.Fatalf("Invalid output format for inventory: %s", output)
 		}
 
-		// Perform inventory scan
 		performInventory(cfg, inventoryFormatter)
 		return
-	}
-
-	formatter := checkOutput(output)
-	if formatter == nil {
-		log.Fatalf("Invalid output format: %s", output)
 	}
 
 	switch service {

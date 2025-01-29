@@ -1,16 +1,19 @@
 package main
 
 import (
-	"fmt"
 	"log"
-	"os"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/fatih/color"
-	"github.com/olekukonko/tablewriter"
 )
+
+type SqsQueues struct {
+	QueueName string `json:"queueName"`
+	QueueArn  string `json:"queueArn"`
+	Encrypted bool   `json:"encrypted,omitempty"`
+}
 
 func serviceSQS(cfg AwsCfg, output string) {
 	log.Println(color.RedString("SQS assessment!"))
@@ -18,7 +21,6 @@ func serviceSQS(cfg AwsCfg, output string) {
 	sqsClient := sqs.NewFromConfig(cfg.cfg)
 	var queues []SqsQueues
 
-	// Paginate through the results
 	paginator := sqs.NewListQueuesPaginator(sqsClient, &sqs.ListQueuesInput{})
 
 	for paginator.HasMorePages() {
@@ -54,47 +56,9 @@ func serviceSQS(cfg AwsCfg, output string) {
 	}
 
 	if output == "table" {
-		formatter := &TableFormatterSqs{}
-		formatter.Format(queues)
+		FormatTable(queues, []string{"Queue", "Arn", "Encrypted"})
 	} else {
-		formatter := &JSONFormatterSqs{}
-		formatter.Format(queues)
+		FormatJSON(queues, "sqs")
 	}
 }
 
-type SqsQueues struct {
-	QueueName string `json:"queueName"`
-	QueueArn  string `json:"queueArn"`
-	Encrypted bool   `json:"encrypted,omitempty"`
-}
-
-type FormatterSQS interface {
-	Format(queues []SqsQueues)
-}
-
-type TableFormatterSqs struct{}
-type JSONFormatterSqs struct{}
-
-func (f *TableFormatterSqs) Format(queues []SqsQueues) {
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Queue", "Arn", "Encryprion"})
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
-
-	for _, queue := range queues {
-		table.Append([]string{
-			queue.QueueName,
-			queue.QueueArn,
-			fmt.Sprintf("%t", queue.Encrypted),
-		})
-	}
-	table.SetBorder(true)
-	table.Render()
-}
-
-func (f *JSONFormatterSqs) Format(queues []SqsQueues) {
-	err := serviceAssessmentToJSONFile("sqs", queues)
-
-	if err != nil {
-		log.Println(color.RedString("Cannot save assessment to the JSON file. "), err)
-	}
-}

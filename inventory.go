@@ -126,7 +126,7 @@ func listSqsQueues(cfg AwsCfg) int {
 func performInventory(cfg AwsCfg, formatter func([]InventoryResult)) {
 	var results []InventoryResult
 	makeInventory := func(serviceName string, f ServiceFunction) {
-		log.Printf(color.CyanString("Inventory scanning service: "), serviceName)
+		log.Printf(color.CyanString("Inventory scanning service: %s"), serviceName)
 		results = append(results, InventoryResult{
 			Service: serviceName,
 			Count:   f(cfg),
