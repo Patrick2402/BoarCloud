@@ -1,32 +1,29 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 )
 
 type SnsTopics struct {
-	TopicName string `json:"topicName"`
-	TopicArn  string `json:"topicArn"`
-	Encrypted bool   `json:"encrypted,omitempty"`
-	SubscriptionsConfirmed int `json:"SubscriptionsConfirmed"`
+	TopicName              string `json:"topicName"`
+	TopicArn               string `json:"topicArn"`
+	Encrypted              bool   `json:"encrypted,omitempty"`
+	SubscriptionsConfirmed int    `json:"SubscriptionsConfirmed"`
 }
 
 type FormatterSNS interface {
 	Format(topics []SnsTopics)
 }
 
-type JSONFormatterSns struct {}
-
+type JSONFormatterSns struct{}
 
 func (f *JSONFormatterSns) Format(topics []SnsTopics) {
 	err := serviceAssessmentToJSONFile("sns", topics)
@@ -35,7 +32,6 @@ func (f *JSONFormatterSns) Format(topics []SnsTopics) {
 		log.Println(color.RedString("Cannot save assessment to the JSON file. "), err)
 	}
 }
-
 
 type TableFormatterSns struct{}
 
@@ -56,16 +52,16 @@ func (f *TableFormatterSns) Format(topics []SnsTopics) {
 	table.Render()
 }
 
-func serviceSNS(cfg aws.Config, ctx context.Context, output string) {
+func serviceSNS(cfg AwsCfg, output string) {
 	// Create SNS service client
-	snsClient := sns.NewFromConfig(cfg)
+	snsClient := sns.NewFromConfig(cfg.cfg)
 	var topics []SnsTopics
 
 	// Paginate through the results
-	paginator := sns.NewListTopicsPaginator(snsClient,  &sns.ListTopicsInput{})
+	paginator := sns.NewListTopicsPaginator(snsClient, &sns.ListTopicsInput{})
 
 	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(ctx)
+		page, err := paginator.NextPage(cfg.ctx)
 		if err != nil {
 			log.Fatalf("failed to list topics: %v", err)
 		}
@@ -75,7 +71,7 @@ func serviceSNS(cfg aws.Config, ctx context.Context, output string) {
 			getTopicAttributesInput := &sns.GetTopicAttributesInput{
 				TopicArn: topic.TopicArn,
 			}
-			topicAttributes, err := snsClient.GetTopicAttributes(ctx, getTopicAttributesInput)
+			topicAttributes, err := snsClient.GetTopicAttributes(cfg.ctx, getTopicAttributesInput)
 			if err != nil {
 				log.Printf("failed to get topic attributes for %s: %v", *topic.TopicArn, err)
 				continue
@@ -83,11 +79,11 @@ func serviceSNS(cfg aws.Config, ctx context.Context, output string) {
 
 			encrypted := topicAttributes.Attributes["KmsMasterKeyId"] != ""
 			subscriptionsConfirmed, _ := strconv.Atoi(topicAttributes.Attributes["SubscriptionsConfirmed"])
-		
+
 			topics = append(topics, SnsTopics{
-				TopicName: topicName[len(topicName)-1],
-				TopicArn:  *topic.TopicArn,
-				Encrypted: encrypted,
+				TopicName:              topicName[len(topicName)-1],
+				TopicArn:               *topic.TopicArn,
+				Encrypted:              encrypted,
 				SubscriptionsConfirmed: subscriptionsConfirmed,
 			})
 		}

@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
@@ -17,20 +18,39 @@ import (
 	"github.com/olekukonko/tablewriter"
 )
 
-// ServiceFunction defines a function type for counting resources
-type ServiceFunction func(cfg aws.Config, ctx context.Context) int
+type ServiceFunction func(AwsCfg) int
 
-// InventoryResult stores the results of the inventory scan
 type InventoryResult struct {
 	Service string `json:"service"`
 	Count   int    `json:"count"`
 }
 
-// listS3Buckets counts the number of S3 buckets
-func listS3Buckets(cfg aws.Config, ctx context.Context) int {
-	client := s3.NewFromConfig(cfg)
+type AwsCfg struct {
+	cfg aws.Config
+	ctx context.Context
+}
 
-	output, err := client.ListBuckets(ctx, &s3.ListBucketsInput{})
+// awsInit initializes the AWS configuration and context
+func awsCfg(region string) (init AwsCfg, err error) {
+	ctx := context.Background()
+	log.Println(color.BlueString("Loading default AWS account configuration..."))
+
+	cfg, err := config.LoadDefaultConfig(ctx,
+		config.WithRegion(region),
+	)
+	if err != nil {
+		return AwsCfg{}, err
+	}
+
+	log.Println(color.GreenString("Configuration loaded successfuly!"))
+
+	return AwsCfg{ctx: ctx, cfg: cfg}, nil
+}
+
+func listS3Buckets(cfg AwsCfg) int {
+	client := s3.NewFromConfig(cfg.cfg)
+
+	output, err := client.ListBuckets(cfg.ctx, &s3.ListBucketsInput{})
 	if err != nil {
 		log.Printf("Failed to list S3 buckets: %v", err)
 		return 0
@@ -39,15 +59,14 @@ func listS3Buckets(cfg aws.Config, ctx context.Context) int {
 	return len(output.Buckets)
 }
 
-// listLambdaFunctions counts the number of Lambda functions
-func listLambdaFunctions(cfg aws.Config, ctx context.Context) int {
-	client := lambda.NewFromConfig(cfg)
+func listLambdaFunctions(cfg AwsCfg) int {
+	client := lambda.NewFromConfig(cfg.cfg)
 
 	var count int
 	var marker *string
 
 	for {
-		output, err := client.ListFunctions(ctx, &lambda.ListFunctionsInput{
+		output, err := client.ListFunctions(cfg.ctx, &lambda.ListFunctionsInput{
 			Marker: marker,
 		})
 		if err != nil {
@@ -66,13 +85,13 @@ func listLambdaFunctions(cfg aws.Config, ctx context.Context) int {
 	return count
 }
 
-func listSnsTopics(cfg aws.Config, ctx context.Context) int {
-	snsClient := sns.NewFromConfig(cfg)
+func listSnsTopics(cfg AwsCfg) int {
+	snsClient := sns.NewFromConfig(cfg.cfg)
 
 	var topics []types.Topic
 	paginator := sns.NewListTopicsPaginator(snsClient, &sns.ListTopicsInput{})
 	for paginator.HasMorePages() {
-		output, err := paginator.NextPage(ctx)
+		output, err := paginator.NextPage(cfg.ctx)
 		if err != nil {
 			log.Printf("Couldn't get topics. Here's why: %v\n", err)
 			break
@@ -85,14 +104,14 @@ func listSnsTopics(cfg aws.Config, ctx context.Context) int {
 
 }
 
-func listSqsQueues(cfg aws.Config, ctx context.Context) int {
-	sqsClient := sqs.NewFromConfig(cfg)
+func listSqsQueues(cfg AwsCfg) int {
+	sqsClient := sqs.NewFromConfig(cfg.cfg)
 
 	// Paginate through the results
 	paginator := sqs.NewListQueuesPaginator(sqsClient, &sqs.ListQueuesInput{})
 	var queues []string
 	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(ctx)
+		page, err := paginator.NextPage(cfg.ctx)
 		if err != nil {
 			log.Printf("Couldn't get queues. Here's why: %v\n", err)
 			break
@@ -104,40 +123,31 @@ func listSqsQueues(cfg aws.Config, ctx context.Context) int {
 
 }
 
-// performInventory performs an inventory scan and returns results
-func performInventory(cfg aws.Config, ctx context.Context, formatter FormatterInventory) {
-	// Map of supported services and their corresponding functions
-	services := map[string]ServiceFunction{
-		"s3":     listS3Buckets,
-		"lambda": listLambdaFunctions,
-		"sns":    listSnsTopics,
-		"sqs":    listSqsQueues,
-	}
-
+func performInventory(cfg AwsCfg, formatter func([]InventoryResult)) {
 	var results []InventoryResult
-
-	// Iterate over all services and count resources
-	for serviceName, function := range services {
+	makeInventory := func(serviceName string, f ServiceFunction) {
 		log.Printf(color.CyanString("Inventory scanning service: "), serviceName)
-		count := function(cfg, ctx)
 		results = append(results, InventoryResult{
 			Service: serviceName,
-			Count:   count,
+			Count:   f(cfg),
 		})
 	}
-	formatter.Format(results)
+
+	makeInventory("s3", listS3Buckets)
+	makeInventory("lambda", listLambdaFunctions)
+	makeInventory("sns", listSnsTopics)
+	makeInventory("sqs", listSqsQueues)
+
+	formatter(results)
 }
 
-// Formatter interface for output formatting
 type FormatterInventory interface {
 	Format(results []InventoryResult)
 }
 
-// TableFormatter formats results in a table
 type TableFormatterInventory struct{}
 
-func (f *TableFormatterInventory) Format(results []InventoryResult) {
-
+func formatTable(results []InventoryResult) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Service", "Count"})
 	table.SetAlignment(tablewriter.ALIGN_LEFT)
@@ -153,11 +163,7 @@ func (f *TableFormatterInventory) Format(results []InventoryResult) {
 	table.Render()
 }
 
-// JSONFormatter formats results as JSON
-type JSONFormatterInventory struct{}
-
-func (f *JSONFormatterInventory) Format(results []InventoryResult) {
-
+func formatJson(results []InventoryResult) {
 	file, err := os.Create("inventory.json")
 	if err != nil {
 		log.Printf("Failed to create inventory.json: %v", err)
@@ -173,4 +179,17 @@ func (f *JSONFormatterInventory) Format(results []InventoryResult) {
 	}
 
 	log.Println(color.GreenString("Inventory saved to inventory.json"))
+}
+
+func checkOutputInventory(output string) func([]InventoryResult) {
+	if output == "table" {
+		log.Println(color.CyanString("Output form: table"))
+		return formatTable
+	}
+	if output == "json" {
+		log.Println(color.CyanString("Output form: JSON"))
+		return formatJson
+	}
+	log.Println(color.CyanString("Default output: table"))
+	return formatTable
 }
